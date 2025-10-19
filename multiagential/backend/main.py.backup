@@ -1,0 +1,605 @@
+# FastAPI backend for AI-Powered Adaptive Learning Mentor
+import os
+import uuid
+from fastapi import FastAPI, HTTPException, Request, Response
+from fastapi.middleware.cors import CORSMiddleware
+from pydantic import BaseModel
+from typing import List, Dict, Optional
+from dotenv import load_dotenv
+from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
+
+load_dotenv()
+
+from graph import create_quiz_graph
+from feedback_graph import create_feedback_graph
+from content_graph import create_content_graph
+from mermaid_interaction_graph import create_mermaid_interaction_graph
+import database
+from mermaid_validator import validate_mermaid, MermaidValidationError
+
+limiter = Limiter(key_func=get_remote_address)
+app = FastAPI()
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.on_event("startup")
+async def startup_event():
+    database.init_db()
+
+# Allow frontend requests
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+    expose_headers=["X-User-Key"],
+)
+
+# --- User Handling ---
+async def get_user_key(request: Request, response: Response):
+    user_key = request.headers.get("x-user-key")
+    if not user_key:
+        user_key = str(uuid.uuid4())
+        response.headers["X-User-Key"] = user_key
+    
+    if not database.get_user(user_key):
+        database.create_user(user_key)
+        
+    return user_key
+
+# --- Models ---
+class QuizQuestionForClient(BaseModel):
+    question: str
+    options: List[str]
+
+class QuizResponse(BaseModel):
+    quiz_id: str
+    questions: List[QuizQuestionForClient]
+
+class QuizSubmission(BaseModel):
+    quiz_id: str
+    answers: List[str]
+
+class FeedbackRequest(BaseModel):
+    user_input: str
+
+class ContentResponse(BaseModel):
+    content: str
+    exercises: List[str]
+    resources: List[Dict]
+    diagram: str
+
+class ProgressResponse(BaseModel):
+    current_topic: Optional[str]
+
+class MermaidInteractionRequest(BaseModel):
+    mermaid_diagram_content: str
+    hovered_item: str
+
+# --- Graphs ---
+quiz_graph = create_quiz_graph()
+feedback_graph = create_feedback_graph()
+content_graph = create_content_graph()
+mermaid_interaction_graph = create_mermaid_interaction_graph()
+
+# --- Endpoints ---
+@app.get("/quiz", response_model=QuizResponse)
+@limiter.limit("10/minute")
+async def get_quiz_endpoint(request: Request, response: Response, topic: str = "a random topic", num_questions: int = 2):
+    """
+    Generates a quiz using the langgraph graph and stores it in the database.
+    """
+    user_key = await get_user_key(request, response)
+    try:
+        graph_input = {"topic": topic, "num_questions": num_questions}
+        result = quiz_graph.invoke(graph_input)
+        questions_with_answers = result["questions"]
+
+        quiz_id = str(uuid.uuid4())
+        database.store_quiz(quiz_id, questions_with_answers)
+
+        questions_for_client = [
+            QuizQuestionForClient(question=q["question"], options=q["options"])
+            for q in questions_with_answers
+        ]
+
+        return QuizResponse(quiz_id=quiz_id, questions=questions_for_client)
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate quiz: {str(e)}")
+
+
+@app.post("/quiz/submit")
+@limiter.limit("20/minute")
+async def submit_quiz(request: Request, response: Response, submission: QuizSubmission):
+    """
+    Evaluates a quiz submission and returns the score.
+    """
+    user_key = await get_user_key(request, response)
+    quiz = database.get_quiz(submission.quiz_id)
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Quiz not found")
+
+    correct_answers = [q["answer"] for q in quiz]
+    score = sum(
+        [user_answer == correct_answer for user_answer, correct_answer in zip(submission.answers, correct_answers)]
+    )
+    
+    database.delete_quiz(submission.quiz_id)
+
+    return {"score": score, "total": len(correct_answers)}
+
+@app.post("/feedback")
+@limiter.limit("10/minute")
+async def get_feedback_endpoint(request: Request, response: Response, req: FeedbackRequest):
+    """
+    Generates feedback using the feedback graph.
+    """
+    user_key = await get_user_key(request, response)
+    try:
+        graph_input = {"user_input": req.user_input}
+        result = feedback_graph.invoke(graph_input)
+        return {"feedback": result["feedback"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate feedback: {str(e)}")
+
+@app.get("/content", response_model=ContentResponse)
+@limiter.limit("10/minute")
+async def get_content_endpoint(request: Request, response: Response, topic: str = "a random topic"):
+    """
+    Generates content using the content graph and updates user progress.
+    """
+    user_key = await get_user_key(request, response)
+    try:
+        database.update_progress(user_key, topic)
+        graph_input = {"topic": topic}
+        result = content_graph.invoke(graph_input)
+        return ContentResponse(
+            content=result.get("content", ""),
+            exercises=result.get("exercises", []),
+            resources=result.get("resources", []),
+            diagram=result.get("diagram", "")
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate content: {str(e)}")
+
+@app.get("/progress", response_model=ProgressResponse)
+@limiter.limit("30/minute")
+async def get_progress_endpoint(request: Request, response: Response):
+    """
+    Gets the user's current progress.
+    """
+    user_key = await get_user_key(request, response)
+    current_topic = database.get_progress(user_key)
+    return ProgressResponse(current_topic=current_topic)
+
+# --- Course Management Endpoints ---
+
+class CourseEnrollmentRequest(BaseModel):
+    course_id: str
+
+class ModuleProgressRequest(BaseModel):
+    course_id: str
+    module_id: str
+    completed: bool
+
+class CourseAccessRequest(BaseModel):
+    course_id: str
+    module_id: Optional[str] = None
+
+class MermaidValidationRequest(BaseModel):
+    content: str
+
+class MermaidValidationResponse(BaseModel):
+    valid: bool
+    errors: List[str]
+    warnings: List[str]
+    diagram_type: Optional[str] = None
+
+@app.post("/courses/enroll")
+@limiter.limit("30/minute")
+async def enroll_course(request: Request, response: Response, req: CourseEnrollmentRequest):
+    """
+    Enrolls a user in a course.
+    """
+    user_key = await get_user_key(request, response)
+    try:
+        database.enroll_user_in_course(user_key, req.course_id)
+        return {"message": "Successfully enrolled in course", "course_id": req.course_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to enroll in course: {str(e)}")
+
+@app.post("/courses/access")
+@limiter.limit("60/minute")
+async def update_course_access(request: Request, response: Response, req: CourseAccessRequest):
+    """
+    Updates course access tracking (last accessed time and module).
+    """
+    user_key = await get_user_key(request, response)
+    try:
+        database.update_course_access(user_key, req.course_id, req.module_id)
+        return {"message": "Course access updated"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update course access: {str(e)}")
+
+@app.get("/courses/enrollments")
+@limiter.limit("30/minute")
+async def get_user_enrollments(request: Request, response: Response):
+    """
+    Gets all course enrollments for the user.
+    """
+    user_key = await get_user_key(request, response)
+    try:
+        enrollments = database.get_user_enrollments(user_key)
+        return {"enrollments": enrollments}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get enrollments: {str(e)}")
+
+@app.post("/courses/module-progress")
+@limiter.limit("60/minute")
+async def update_module_progress(request: Request, response: Response, req: ModuleProgressRequest):
+    """
+    Updates progress for a specific module.
+    """
+    user_key = await get_user_key(request, response)
+    try:
+        database.update_module_progress(user_key, req.course_id, req.module_id, req.completed)
+        # Also update course access
+        database.update_course_access(user_key, req.course_id, req.module_id)
+        return {"message": "Module progress updated"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to update module progress: {str(e)}")
+
+@app.get("/courses/{course_id}/progress")
+@limiter.limit("60/minute")
+async def get_course_progress(request: Request, response: Response, course_id: str):
+    """
+    Gets module completion status for a specific course.
+    """
+    user_key = await get_user_key(request, response)
+    try:
+        progress = database.get_course_progress(user_key, course_id)
+        return {"course_id": course_id, "progress": progress}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get course progress: {str(e)}")
+
+@app.get("/courses/summary")
+@limiter.limit("30/minute")
+async def get_course_summary(request: Request, response: Response):
+    """
+    Gets a summary of user's course activity for the dashboard.
+    """
+    user_key = await get_user_key(request, response)
+    try:
+        summary = database.get_user_course_summary(user_key)
+        enrollments = database.get_user_enrollments(user_key)
+        return {
+            "summary": summary,
+            "recent_courses": enrollments[:3]  # Last 3 accessed courses
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get course summary: {str(e)}")
+
+# --- Mermaid Validation ---
+@app.post("/validate-mermaid", response_model=MermaidValidationResponse)
+@limiter.limit("20/minute")
+async def validate_mermaid_endpoint(request: Request, req: MermaidValidationRequest):
+    """
+    Validates Mermaid diagram syntax before loading.
+    """
+    try:
+        validation_result = validate_mermaid(req.content)
+        
+        return MermaidValidationResponse(
+            valid=validation_result["valid"],
+            errors=validation_result["errors"],
+            warnings=validation_result["warnings"],
+            diagram_type=validation_result.get("diagram_type")
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to validate Mermaid content: {str(e)}")
+
+# --- Adaptive Learning Endpoints (Multi-Agent Orchestration) ---
+
+from adaptive_orchestrator import (
+    orchestrate_onboarding,
+    orchestrate_content_delivery,
+    orchestrate_quiz_flow
+)
+import db_postgres as db_pg
+import cache_redis as cache
+
+class OnboardingRequest(BaseModel):
+    interests: List[str]
+    learning_goals: List[str]
+    time_commitment: int
+    learning_style: str
+    skill_level: str
+    background: Optional[str] = None
+
+class OnboardingResponse(BaseModel):
+    learner_profile: Dict
+    learning_journey: List[Dict]
+    agent_activity: List[Dict]
+    message: str
+
+@app.post("/adaptive/onboarding", response_model=OnboardingResponse)
+@limiter.limit("10/minute")
+async def adaptive_onboarding(request: Request, response: Response, req: OnboardingRequest):
+    """
+    🤖 MULTI-AGENT WORKFLOW: Onboarding
+
+    Orchestrates Learner Profiler Agent → Journey Architect Agent
+    to create a personalized learning experience.
+
+    This endpoint showcases agent collaboration!
+    """
+    user_key = await get_user_key(request, response)
+
+    try:
+        # Prepare onboarding data
+        onboarding_data = {
+            "interests": req.interests,
+            "learning_goals": req.learning_goals,
+            "time_commitment": req.time_commitment,
+            "learning_style": req.learning_style,
+            "skill_level": req.skill_level,
+            "background": req.background
+        }
+
+        # Orchestrate multi-agent onboarding
+        result = orchestrate_onboarding(user_key, onboarding_data)
+
+        return OnboardingResponse(
+            learner_profile=result["learner_profile"],
+            learning_journey=result["learning_journey"],
+            agent_activity=result["agent_activity"],
+            message="Your personalized learning journey has been created by our AI agents!"
+        )
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to complete onboarding: {str(e)}")
+
+
+@app.get("/adaptive/journey")
+@limiter.limit("30/minute")
+async def get_adaptive_journey(request: Request, response: Response):
+    """
+    Gets the user's personalized learning journey (with caching).
+    """
+    user_key = await get_user_key(request, response)
+
+    try:
+        # Try cache first
+        cached_journey = cache.get_cached_learning_journey(user_key)
+        if cached_journey:
+            return {
+                "journey": cached_journey,
+                "total_topics": len(cached_journey),
+                "completed": len([t for t in cached_journey if t["status"] == "completed"]),
+                "in_progress": len([t for t in cached_journey if t["status"] == "in_progress"]),
+                "cached": True
+            }
+
+        # Cache miss - get from database
+        journey = db_pg.get_learning_journey(user_key)
+
+        if not journey:
+            return {"journey": [], "message": "Complete onboarding to get your personalized journey"}
+
+        # Cache the result
+        cache.set_cached_learning_journey(user_key, journey)
+
+        return {
+            "journey": journey,
+            "total_topics": len(journey),
+            "completed": len([t for t in journey if t["status"] == "completed"]),
+            "in_progress": len([t for t in journey if t["status"] == "in_progress"]),
+            "cached": False
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get journey: {str(e)}")
+
+
+@app.get("/adaptive/recommendations")
+@limiter.limit("20/minute")
+async def get_adaptive_recommendations(request: Request, response: Response):
+    """
+    🤖 MULTI-AGENT WORKFLOW: Smart Recommendations (with caching)
+
+    Uses Recommendation Agent coordinating with:
+    - Learner Profiler (for context)
+    - Performance Analyzer (for performance data)
+    - Journey Architect (for journey state)
+    """
+    user_key = await get_user_key(request, response)
+
+    try:
+        # Try cache first
+        cached_recs = cache.get_cached_recommendations(user_key)
+        if cached_recs:
+            return {
+                **cached_recs,
+                "cached": True
+            }
+
+        from recommendation_agent import generate_recommendations
+
+        # Get required data (with caching where applicable)
+        profile = cache.get_cached_learner_profile(user_key) or db_pg.get_user_profile(user_key)
+        journey = cache.get_cached_learning_journey(user_key) or db_pg.get_learning_journey(user_key)
+        quiz_history = db_pg.get_quiz_history(user_key, limit=20)
+
+        if not profile or not journey:
+            return {"recommendations": [], "message": "Complete onboarding first"}
+
+        # Get mastery data
+        all_mastery = cache.get_cached_topic_mastery(user_key) or db_pg.get_all_topic_mastery(user_key)
+        topic_mastery = {m["topic"]: m for m in all_mastery}
+
+        # Simple performance analysis for recommendations
+        from performance_analyzer_agent import analyze_performance
+        performance = analyze_performance(user_key, quiz_history, topic_mastery) if quiz_history else {
+            "strengths": [],
+            "knowledge_gaps": [],
+            "performance_summary": "No quiz data yet"
+        }
+
+        # Generate recommendations
+        recommendations = generate_recommendations(
+            user_key,
+            profile,
+            performance,
+            journey
+        )
+
+        # Cache the result
+        cache.set_cached_recommendations(user_key, recommendations)
+
+        return {
+            "recommendations": recommendations["recommendations"],
+            "reasoning": recommendations["reasoning"],
+            "confidence": recommendations["confidence"],
+            "cached": False
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate recommendations: {str(e)}")
+
+
+@app.get("/adaptive/content")
+@limiter.limit("20/minute")
+async def get_adaptive_content(request: Request, response: Response, topic: str):
+    """
+    🤖 MULTI-AGENT WORKFLOW: Adaptive Content Delivery
+
+    Orchestrates Performance Analyzer → Content Personalizer → Diagram Generator
+    to deliver content at the right difficulty level.
+    """
+    user_key = await get_user_key(request, response)
+
+    try:
+        # Orchestrate adaptive content delivery
+        result = orchestrate_content_delivery(user_key, topic)
+
+        return {
+            "content": result["content"].get("content", ""),
+            "exercises": result["content"].get("exercises", []),
+            "resources": result["content"].get("resources", []),
+            "diagram": result["content"].get("diagram", ""),
+            "difficulty": result["difficulty"],
+            "mastery": result.get("mastery"),
+            "agent_activity": result["agent_activity"]
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to deliver adaptive content: {str(e)}")
+
+
+@app.get("/adaptive/performance")
+@limiter.limit("20/minute")
+async def get_performance_analysis(request: Request, response: Response):
+    """
+    🤖 AGENT: Performance Analyzer
+
+    Provides detailed performance analysis including:
+    - Topic mastery scores
+    - Knowledge gaps
+    - Strengths
+    - Learning velocity
+    """
+    user_key = await get_user_key(request, response)
+
+    try:
+        from performance_analyzer_agent import analyze_performance
+
+        # Get data
+        quiz_history = db_pg.get_quiz_history(user_key, limit=20)
+        all_mastery = db_pg.get_all_topic_mastery(user_key)
+        topic_mastery = {m["topic"]: m for m in all_mastery}
+
+        if not quiz_history:
+            return {
+                "message": "Take some quizzes to see your performance analysis",
+                "mastery": {},
+                "summary": "No data yet"
+            }
+
+        # Analyze performance
+        analysis = analyze_performance(user_key, quiz_history, topic_mastery)
+
+        return {
+            "mastery_updates": analysis["mastery_updates"],
+            "knowledge_gaps": analysis["knowledge_gaps"],
+            "strengths": analysis["strengths"],
+            "difficulty_recommendations": analysis["difficulty_recommendations"],
+            "performance_summary": analysis["performance_summary"],
+            "confidence": analysis["confidence"]
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to analyze performance: {str(e)}")
+
+
+@app.get("/adaptive/agent-decisions")
+@limiter.limit("20/minute")
+async def get_agent_decisions(request: Request, response: Response, agent_name: Optional[str] = None):
+    """
+    🔍 TRANSPARENCY: Agent Decision Log
+
+    Shows all decisions made by adaptive agents for this user.
+    Demonstrates the multi-agent reasoning process.
+    """
+    user_key = await get_user_key(request, response)
+
+    try:
+        decisions = db_pg.get_agent_decisions(user_key, agent_name, limit=20)
+
+        return {
+            "decisions": decisions,
+            "total": len(decisions),
+            "agents": list(set(d["agent_name"] for d in decisions))
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to get agent decisions: {str(e)}")
+
+
+# --- Health check ---
+@app.get("/")
+@limiter.limit("60/minute")
+def health(request: Request):
+    redis_health = cache.cache_health_check()
+    return {
+        "status": "ok",
+        "adaptive_agents": "online",
+        "redis": redis_health.get("status", "unknown"),
+        "cache_available": cache.is_redis_available()
+    }
+
+
+@app.get("/health/cache")
+@limiter.limit("30/minute")
+def cache_health(request: Request):
+    """Detailed cache health check"""
+    return cache.cache_health_check()
+
+# --- Mermaid Interaction ---
+@app.post("/mermaid-interaction")
+@limiter.limit("20/minute")
+async def mermaid_interaction_endpoint(request: Request, response: Response, req: MermaidInteractionRequest):
+    """
+    Generates an explanation for a hovered item in a Mermaid diagram.
+    """
+    user_key = await get_user_key(request, response)
+    try:
+        graph_input = {"mermaid_diagram_content": req.mermaid_diagram_content, "hovered_item": req.hovered_item}
+        result = mermaid_interaction_graph.invoke(graph_input)
+        return {"explanation": result["explanation"]}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Failed to generate explanation: {str(e)}")

@@ -1,6 +1,30 @@
-version: '3.8'
-
 services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: adaptive_user
+      POSTGRES_PASSWORD: adaptive_pass
+      POSTGRES_DB: adaptive_learning
+    # No external ports - only accessible within Docker network
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U adaptive_user -d adaptive_learning"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    # No external ports - only accessible within Docker network
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
   backend:
     build:
       context: ./backend
@@ -8,13 +32,22 @@ services:
       - "8007:8000"
     volumes:
       - ./backend:/app
-    command: uvicorn main:app --host 0.0.0.0 --port 8007
+    environment:
+      - DATABASE_URL=postgresql://adaptive_user:adaptive_pass@postgres:5432/adaptive_learning
+      - REDIS_URL=redis://redis:6379
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
 
   frontend:
     build:
       context: ./frontend
     ports:
       - "3007:3000"
-    volumes:
-      - ./frontend:/app
-    command: npm start
+
+volumes:
+  postgres_data:
+  redis_data:

@@ -1,0 +1,345 @@
+{
+  "info": {
+    "name": "AlkenaCode Adaptive Learning Platform API",
+    "description": "Complete API collection for the AlkenaCode Adaptive Learning Platform with 8 AI agents.\n\n**Architecture:**\n- 8 specialized AI agents (LangGraph + OpenRouter)\n- PostgreSQL database with 11 models\n- Redis caching layer\n- FastAPI backend\n\n**Agents:**\n1. Learner Profiler Agent - Creates learner profiles\n2. Journey Architect Agent - Designs learning paths\n3. Performance Analyzer Agent - Tracks mastery & performance\n4. Content Personalizer Agent - Generates adaptive content\n5. Quiz Generator Agent - Creates difficulty-appropriate quizzes\n6. Diagram Generator Agent - Generates Mermaid diagrams\n7. Recommendation Agent - Suggests next topics\n8. Feedback Agent - Provides motivational feedback",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:8007",
+      "type": "string"
+    },
+    {
+      "key": "user_key",
+      "value": "test-user-{{$timestamp}}",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & Monitoring",
+      "item": [
+        {
+          "name": "Root Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/",
+              "host": ["{{base_url}}"],
+              "path": [""]
+            },
+            "description": "Basic health check endpoint. Returns backend status and available endpoints."
+          },
+          "response": []
+        },
+        {
+          "name": "Cache Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/health/cache",
+              "host": ["{{base_url}}"],
+              "path": ["health", "cache"]
+            },
+            "description": "Check Redis cache health and statistics."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Onboarding & Profile",
+      "item": [
+        {
+          "name": "Onboard New Learner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-key",
+                "value": "{{user_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"interests\": [\"Python Programming\", \"Machine Learning\"],\n  \"learning_goals\": [\"career_change\"],\n  \"time_commitment\": 10,\n  \"learning_style\": \"interactive\",\n  \"skill_level\": \"beginner\",\n  \"background\": \"Some programming experience\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/adaptive/onboarding",
+              "host": ["{{base_url}}"],
+              "path": ["adaptive", "onboarding"]
+            },
+            "description": "**Agents Used:**\n- Learner Profiler Agent - Creates detailed learner profile\n- Journey Architect Agent - Designs personalized learning path\n\n**Creates:**\n- User profile in database\n- Learning journey with milestones\n- Initial progress tracking\n\n**Fields:**\n- `interests` (array): Topics of interest\n- `learning_goals` (array): Goals like 'career_change', 'skill_development'\n- `time_commitment` (number): Hours per week\n- `learning_style` (string): 'visual', 'interactive', 'reading'\n- `skill_level` (string): 'beginner', 'intermediate', 'advanced'\n- `background` (string): Optional background description"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Learner Profile",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-key",
+                "value": "{{user_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/adaptive/profile",
+              "host": ["{{base_url}}"],
+              "path": ["adaptive", "profile"]
+            },
+            "description": "Retrieve the complete learner profile including:\n- Skill level\n- Interests\n- Learning goals\n- Learning style preferences\n- Strengths & knowledge gaps"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Learning Journey",
+      "item": [
+        {
+          "name": "Get Learning Journey",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-key",
+                "value": "{{user_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/adaptive/journey",
+              "host": ["{{base_url}}"],
+              "path": ["adaptive", "journey"]
+            },
+            "description": "**Agent Used:** Journey Architect Agent\n\nReturns personalized learning journey with:\n- Ordered list of topics/milestones\n- Estimated time for each topic\n- Prerequisites\n- Current progress status"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Content Delivery",
+      "item": [
+        {
+          "name": "Get Adaptive Content",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-key",
+                "value": "{{user_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/adaptive/content?topic=Python Basics",
+              "host": ["{{base_url}}"],
+              "path": ["adaptive", "content"],
+              "query": [
+                {
+                  "key": "topic",
+                  "value": "Python Basics"
+                }
+              ]
+            },
+            "description": "**Agents Used:**\n- Content Personalizer Agent - Generates adaptive content\n- Diagram Generator Agent - Creates Mermaid diagrams\n\n**Returns:**\n- Markdown formatted content\n- Interactive exercises\n- Visual diagrams (Mermaid syntax)\n- External resources\n- Difficulty level\n\n**Query Parameters:**\n- `topic` (required): Topic name (e.g., 'Python Basics', 'Machine Learning')"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Quiz System",
+      "item": [
+        {
+          "name": "Generate Adaptive Quiz",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-key",
+                "value": "{{user_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/adaptive/quiz?topic=Python Basics&num_questions=5",
+              "host": ["{{base_url}}"],
+              "path": ["adaptive", "quiz"],
+              "query": [
+                {
+                  "key": "topic",
+                  "value": "Python Basics"
+                },
+                {
+                  "key": "num_questions",
+                  "value": "5"
+                }
+              ]
+            },
+            "description": "**Agent Used:** Quiz Generator Agent\n\n**Adaptive Difficulty:**\n- Checks user's skill level from profile\n- Checks topic mastery score\n- Adjusts difficulty accordingly (beginner/intermediate/advanced)\n\n**Returns:**\n- Unique quiz_id (for submission)\n- Questions with multiple choice options\n- Difficulty level\n- Topic name\n\n**Query Parameters:**\n- `topic` (required): Topic for quiz\n- `num_questions` (optional): Number of questions (default: 5)\n\n**Note:** Quiz is cached for 1 hour for submission validation"
+          },
+          "response": []
+        },
+        {
+          "name": "Submit Quiz Answers",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-key",
+                "value": "{{user_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"quiz_id\": \"your-quiz-id-here\",\n  \"answers\": [\n    \"Answer option 1\",\n    \"Answer option 2\",\n    \"Answer option 3\"\n  ]\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/adaptive/quiz/submit",
+              "host": ["{{base_url}}"],
+              "path": ["adaptive", "quiz", "submit"]
+            },
+            "description": "**Agent Used:** Performance Analyzer Agent (for mastery update)\n\n**Process:**\n1. Validates quiz_id from cache\n2. Scores answers against correct answers\n3. Updates quiz_history table\n4. Updates topic_mastery with weighted average (40% old, 60% new)\n5. Triggers performance analysis\n\n**Returns:**\n- Score (0-100)\n- Correct/total questions\n- Detailed results per question\n- Updated mastery score\n- Performance analysis\n\n**Body:**\n- `quiz_id` (string): Quiz ID from generation endpoint\n- `answers` (array): User's selected answers (in order)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Performance & Mastery",
+      "item": [
+        {
+          "name": "Get Mastery Scores",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-key",
+                "value": "{{user_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/adaptive/mastery",
+              "host": ["{{base_url}}"],
+              "path": ["adaptive", "mastery"]
+            },
+            "description": "**Returns:**\n- Topic-wise mastery scores (0-100)\n- Overall skill level\n- Knowledge gaps from profile\n- Strengths from profile\n- Recent quiz performance\n\n**Mastery Score Calculation:**\n- Based on quiz performance\n- Weighted average: 40% previous + 60% latest\n- Updated after each quiz submission"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Performance Analysis",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-key",
+                "value": "{{user_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/adaptive/performance",
+              "host": ["{{base_url}}"],
+              "path": ["adaptive", "performance"]
+            },
+            "description": "**Agent Used:** Performance Analyzer Agent\n\n**Analyzes:**\n- Quiz history\n- Topic mastery scores\n- Learning patterns\n- Skill progression\n\n**Returns:**\n- Overall performance summary\n- Strengths and weaknesses\n- Recommended focus areas\n- Performance trends"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Recommendations & Feedback",
+      "item": [
+        {
+          "name": "Get Topic Recommendations",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-key",
+                "value": "{{user_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/adaptive/recommendations",
+              "host": ["{{base_url}}"],
+              "path": ["adaptive", "recommendations"]
+            },
+            "description": "**Agent Used:** Recommendation Agent\n\n**Considers:**\n- User's learning journey\n- Current mastery scores\n- Learning goals\n- Knowledge gaps\n\n**Returns:**\n- Recommended next topics\n- Priority ranking\n- Reasoning for recommendations\n- Estimated time commitment"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Motivational Feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "x-user-key",
+                "value": "{{user_key}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"user_input\": \"I'm excited to learn Python!\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/adaptive/feedback",
+              "host": ["{{base_url}}"],
+              "path": ["adaptive", "feedback"]
+            },
+            "description": "**Agent Used:** Feedback Agent\n\n**Features:**\n- Sentiment analysis (positive/negative/neutral)\n- Context-aware responses\n- Motivational messaging\n- Personalized encouragement\n\n**Returns:**\n- Sentiment classification\n- Personalized feedback message\n- Encouragement based on context\n\n**Body:**\n- `user_input` (string): User's message or question"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Agent Transparency",
+      "item": [
+        {
+          "name": "Get Agent Decisions",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "x-user-key",
+                "value": "{{user_key}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/adaptive/agent-decisions?limit=10",
+              "host": ["{{base_url}}"],
+              "path": ["adaptive", "agent-decisions"],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "10"
+                }
+              ]
+            },
+            "description": "**Transparency Feature:**\nView all AI agent decisions made for the user.\n\n**Returns:**\n- Agent name\n- Decision/action taken\n- Reasoning\n- Timestamp\n- Context data\n\n**Query Parameters:**\n- `limit` (optional): Number of recent decisions (default: 20)\n\n**Use Cases:**\n- Debugging agent behavior\n- Understanding personalization\n- Auditing AI decisions\n- User transparency"
+          },
+          "response": []
+        }
+      ]
+    }
+  ]
+}
