@@ -11,7 +11,9 @@
 
 > **Beyond Hardcoded Rules: Where 8 AI Agents Collaborate to Personalize Your Learning Journey**
 
-A production-ready multi-agent adaptive learning platform where **8 specialized AI agents** reason together to create truly personalized educational experiences. Unlike traditional adaptive learning systems that rely on hardcoded if-then rules, every decision in AlkenaCode—from content difficulty to quiz generation to learning path adjustments—is made by AI agents using sophisticated reasoning and collaboration.
+A production-ready multi-agent adaptive learning platform where **8 specialized AI agents** reason together to create truly personalized educational experiences. Unlike traditional adaptive learning systems that rely on hardcoded if-then rules, every decision in AlkenaCode, from content difficulty to quiz generation to learning path adjustments, is made by AI agents using sophisticated reasoning and collaboration.
+
+Live Application at [school.alkenacode.dev](https://school.alkenacode.dev)
 
 ---
 
