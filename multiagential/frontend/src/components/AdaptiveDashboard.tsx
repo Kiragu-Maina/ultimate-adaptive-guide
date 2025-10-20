@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { SessionManager } from '@/lib/session';
+import { getApiUrl } from '@/lib/config';
 
 interface LearnerProfile {
   overall_skill_level: string;
@@ -54,7 +55,7 @@ export default function AdaptiveDashboard({ profile, journey, onStartTopic }: Ad
 
   const fetchRecommendations = async (sessionUserId: string) => {
     try {
-      const response = await fetch(`http://localhost:8007/adaptive/recommendations?user_id=${sessionUserId}`);
+      const response = await fetch(`${getApiUrl()}/adaptive/recommendations?user_id=${sessionUserId}`);
       if (response.ok) {
         const data = await response.json();
         setRecommendations(data);

@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import Modal from './Modal';
 import { SessionManager } from '@/lib/session';
+import { getApiUrl } from '@/lib/config';
 
 interface LearnerProfile {
   overall_skill_level: string;
@@ -116,7 +117,7 @@ export default function OnboardingModal({ isOpen, onClose, onComplete }: Onboard
         { agent: 'Learner Profiler', action: 'Analyzing your interests and background...' }
       ]);
 
-      const response = await fetch('http://localhost:8007/adaptive/onboarding', {
+      const response = await fetch(`${getApiUrl()}/adaptive/onboarding`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

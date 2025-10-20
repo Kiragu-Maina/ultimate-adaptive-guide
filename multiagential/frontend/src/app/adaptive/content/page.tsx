@@ -3,6 +3,7 @@
 import { useState, useEffect, Suspense, useRef } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { SessionManager } from '@/lib/session';
+import { getApiUrl } from '@/lib/config';
 import mermaid from 'mermaid';
 import { notifyContentReady } from '@/lib/notifications';
 import MarkdownRenderer from '@/components/MarkdownRenderer';
@@ -82,7 +83,7 @@ function AdaptiveContentInner() {
 
     try {
       const response = await fetch(
-        `http://localhost:8007/adaptive/content?topic=${encodeURIComponent(topicName)}&user_id=${sessionUserId}`
+        `${getApiUrl()}/adaptive/content?topic=${encodeURIComponent(topicName)}&user_id=${sessionUserId}`
       );
 
       if (!response.ok) {
@@ -115,7 +116,7 @@ function AdaptiveContentInner() {
     if (!userId || !topic) return;
 
     try {
-      const response = await fetch('http://localhost:8007/adaptive/content/complete', {
+      const response = await fetch(`${getApiUrl()}/adaptive/content/complete`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

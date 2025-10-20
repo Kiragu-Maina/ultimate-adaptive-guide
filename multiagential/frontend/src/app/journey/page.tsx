@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { SessionManager } from '@/lib/session';
+import { getApiUrl } from '@/lib/config';
 import Link from 'next/link';
 
 interface JourneyMilestone {
@@ -21,7 +22,7 @@ export default function JourneyPage() {
   const loadJourney = useCallback(async () => {
     try {
       const userId = SessionManager.getUserId();
-      const response = await fetch('http://localhost:8007/adaptive/journey', {
+      const response = await fetch(`${getApiUrl()}/adaptive/journey`, {
         headers: {
           'x-user-key': userId,
         },

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { SessionManager } from '@/lib/session';
+import { getApiUrl } from '@/lib/config';
 
 interface TopicMastery {
   topic: string;
@@ -33,7 +34,7 @@ export default function LearningInsights() {
   const loadInsights = async () => {
     try {
       const userId = SessionManager.getUserId();
-      const response = await fetch('http://localhost:8007/adaptive/mastery', {
+      const response = await fetch(`${getApiUrl()}/adaptive/mastery`, {
         headers: {
           'x-user-key': userId,
         },

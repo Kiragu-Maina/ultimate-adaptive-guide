@@ -2,6 +2,7 @@
 
 import { useState, useEffect, Suspense, useCallback } from 'react';
 import { SessionManager } from '@/lib/session';
+import { getApiUrl } from '@/lib/config';
 import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 
@@ -63,7 +64,7 @@ function QuizPageContent() {
     try {
       const userId = SessionManager.getUserId();
       const response = await fetch(
-        `http://localhost:8007/adaptive/quiz?topic=${encodeURIComponent(topic)}&num_questions=5`,
+        `${getApiUrl()}/adaptive/quiz?topic=${encodeURIComponent(topic)}&num_questions=5`,
         {
           headers: {
             'x-user-key': userId,
@@ -116,7 +117,7 @@ function QuizPageContent() {
 
     try {
       const userId = SessionManager.getUserId();
-      const response = await fetch('http://localhost:8007/adaptive/quiz/submit', {
+      const response = await fetch(`${getApiUrl()}/adaptive/quiz/submit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

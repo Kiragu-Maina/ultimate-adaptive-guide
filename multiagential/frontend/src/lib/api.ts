@@ -90,8 +90,9 @@ class ApiClient {
   private baseUrl: string;
   private userKey: string | null = null;
 
-  constructor(baseUrl: string = 'http://localhost:8007') {
-    this.baseUrl = baseUrl;
+  constructor(baseUrl?: string) {
+    // Read from environment variable, fallback to parameter or default
+    this.baseUrl = baseUrl || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4465';
     this.userKey = this.getUserKey();
   }
 

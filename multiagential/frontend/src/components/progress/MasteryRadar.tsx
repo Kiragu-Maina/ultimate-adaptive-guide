@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, ResponsiveContainer, Tooltip } from 'recharts';
 import { SessionManager } from '@/lib/session';
+import { getApiUrl } from '@/lib/config';
 
 interface TopicMastery {
   topic: string;
@@ -29,7 +30,7 @@ export default function MasteryRadar() {
   const loadMasteryData = async () => {
     try {
       const userId = SessionManager.getUserId();
-      const response = await fetch('http://localhost:8007/adaptive/mastery', {
+      const response = await fetch(`${getApiUrl()}/adaptive/mastery`, {
         headers: {
           'x-user-key': userId,
         },

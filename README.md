@@ -336,14 +336,14 @@ Expected output:
 
 ### 6. Access the Platform
 
-- **Frontend**: http://localhost:3007
-- **Backend API**: http://localhost:8007
-- **API Documentation**: http://localhost:8007/docs (Swagger UI)
-- **Health Check**: http://localhost:8007/ (should return `{"status":"ok"}`)
+- **Frontend**: http://localhost:4464
+- **Backend API**: http://localhost:4465
+- **API Documentation**: http://localhost:4465/docs (Swagger UI)
+- **Health Check**: http://localhost:4465/ (should return `{"status":"ok"}`)
 
 ### 7. Complete Onboarding
 
-1. Visit http://localhost:3007
+1. Visit http://localhost:4464
 2. Click **"🚀 Start Your Adaptive Journey"**
 3. Complete the 4-step onboarding wizard:
    - **Step 1**: Select interests (e.g., Python Programming, Web Development)
@@ -648,7 +648,7 @@ generate_quiz(
 ### Base URL
 
 ```
-http://localhost:8007
+http://localhost:4465
 ```
 
 ### Authentication
@@ -948,7 +948,7 @@ x-user-key: user_id
 
 ### Full API Documentation
 
-Visit **http://localhost:8007/docs** for interactive Swagger UI documentation with:
+Visit **http://localhost:4465/docs** for interactive Swagger UI documentation with:
 - Request/response schemas
 - Try-it-out functionality
 - Model definitions
@@ -1333,7 +1333,7 @@ docker compose restart backend
 
 #### 6. Frontend Not Loading
 
-**Symptom**: Cannot access http://localhost:3007
+**Symptom**: Cannot access http://localhost:4464
 
 **Solution**:
 ```bash
@@ -1521,7 +1521,7 @@ SOFTWARE.
 
 **Documentation**: See `/docs` folder for detailed guides
 
-**API Reference**: http://localhost:8007/docs (when running)
+**API Reference**: http://localhost:4465/docs (when running)
 
 **Issues**: GitHub Issues (if repository is public)
 

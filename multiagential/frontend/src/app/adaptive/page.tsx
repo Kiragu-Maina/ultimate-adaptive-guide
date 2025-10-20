@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import OnboardingModal from '@/components/OnboardingModal';
 import AdaptiveDashboard from '@/components/AdaptiveDashboard';
 import { SessionManager } from '@/lib/session';
+import { getApiUrl } from '@/lib/config';
 import { useNotifications } from '@/lib/useNotifications';
 import { notifyOnboardingComplete } from '@/lib/notifications';
 
@@ -37,7 +38,7 @@ export default function AdaptivePage() {
 
   const fetchProfile = useCallback(async (sessionUserId: string) => {
     try {
-      const response = await fetch('http://localhost:8007/adaptive/performance', {
+      const response = await fetch(`${getApiUrl()}/adaptive/performance`, {
         headers: {
           'x-user-key': sessionUserId,
         },
@@ -66,7 +67,7 @@ export default function AdaptivePage() {
 
       if (onboardingUserId === sessionUserId) {
         // User has completed onboarding, fetch their journey
-        const response = await fetch('http://localhost:8007/adaptive/journey', {
+        const response = await fetch(`${getApiUrl()}/adaptive/journey`, {
           headers: {
             'x-user-key': sessionUserId,
           },

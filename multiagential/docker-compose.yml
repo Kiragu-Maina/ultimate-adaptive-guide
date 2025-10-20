@@ -29,7 +29,7 @@ services:
     build:
       context: ./backend
     ports:
-      - "8007:8000"
+      - "4465:8000"
     volumes:
       - ./backend:/app
     environment:
@@ -46,7 +46,9 @@ services:
     build:
       context: ./frontend
     ports:
-      - "3007:3000"
+      - "4464:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=https://school.alkenacode.dev/api
 
 volumes:
   postgres_data:

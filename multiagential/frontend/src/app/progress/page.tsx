@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { SessionManager } from '@/lib/session';
+import { getApiUrl } from '@/lib/config';
 import Link from 'next/link';
 import MasteryRadar from '@/components/progress/MasteryRadar';
 import KnowledgeGaps from '@/components/progress/KnowledgeGaps';
@@ -30,7 +31,7 @@ export default function ProgressPage() {
   const loadMasteryData = useCallback(async () => {
     try {
       const userId = SessionManager.getUserId();
-      const response = await fetch('http://localhost:8007/adaptive/mastery', {
+      const response = await fetch(`${getApiUrl()}/adaptive/mastery`, {
         headers: {
           'x-user-key': userId,
         },

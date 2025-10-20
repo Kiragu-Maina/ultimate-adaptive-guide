@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { SessionManager } from '@/lib/session';
+import { getApiUrl } from '@/lib/config';
 import Link from 'next/link';
 
 interface Topic {
@@ -40,7 +41,7 @@ export default function PracticePage() {
   const loadRecommendedTopics = useCallback(async () => {
     try {
       const userId = SessionManager.getUserId();
-      const response = await fetch('http://localhost:8007/adaptive/recommendations', {
+      const response = await fetch(`${getApiUrl()}/adaptive/recommendations`, {
         headers: {
           'x-user-key': userId,
         },
