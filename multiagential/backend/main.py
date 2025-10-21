@@ -23,6 +23,10 @@ import cache_redis as cache
 from quiz_generator_agent import create_quiz_generator_graph
 from feedback_agent import create_feedback_graph
 from performance_analyzer_agent import analyze_performance
+from job_queue import (
+    JobQueue, JobStatus, start_job_worker, stop_job_worker,
+    register_job_processor
+)
 
 limiter = Limiter(key_func=get_remote_address)
 app = FastAPI()
@@ -33,6 +37,16 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 @app.on_event("startup")
 async def startup_event():
     db_pg.init_db()
+    # Start background job worker
+    start_job_worker()
+    print("✅ Background job worker started")
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    # Stop background job worker
+    stop_job_worker()
+    print("✅ Background job worker stopped")
 
 # Allow frontend requests
 app.add_middleware(
@@ -123,62 +137,196 @@ class OnboardingResponse(BaseModel):
     agent_activity: List[Dict]
     message: str
 
+
+class JobResponse(BaseModel):
+    """Response for async job submission"""
+    job_id: str
+    status: str
+    message: str
+    poll_url: str
+
+
+class JobStatusResponse(BaseModel):
+    """Response for job status polling"""
+    job_id: str
+    status: str
+    progress: int
+    created_at: str
+    updated_at: str
+    result: Optional[Dict] = None
+    error: Optional[str] = None
+    progress_message: Optional[str] = None
+
 # --- Graphs ---
 content_graph = create_content_graph()
 
+
+# --- Job Processors ---
+# Register async job processors that run in background
+
+@register_job_processor("onboarding")
+def process_onboarding_job(params, job_id):
+    """
+    Process onboarding in background
+
+    Args:
+        params: {user_key, onboarding_data}
+        job_id: Job identifier for progress tracking
+    """
+    user_key = params["user_key"]
+    onboarding_data = params["onboarding_data"]
+
+    print(f"\n{'='*60}")
+    print(f"🎓 PROCESSING ONBOARDING JOB: {job_id}")
+    print(f"{'='*60}")
+    print(f"👤 User: {user_key}")
+    print(f"📚 Interests: {onboarding_data['interests']}")
+
+    try:
+        # Update progress
+        JobQueue.update_job_progress(job_id, 20, "Running Learner Profiler Agent...")
+
+        # Orchestrate multi-agent onboarding
+        result = orchestrate_onboarding(user_key, onboarding_data)
+
+        # Update progress
+        JobQueue.update_job_progress(job_id, 90, "Finalizing learning journey...")
+
+        journey_count = len(result["learning_journey"])
+        print(f"✅ Journey created with {journey_count} topics")
+        print(f"{'='*60}\n")
+
+        return {
+            "learner_profile": result["learner_profile"],
+            "learning_journey": result["learning_journey"],
+            "agent_activity": result["agent_activity"],
+            "message": "Your personalized learning journey has been created by our AI agents!"
+        }
+
+    except Exception as e:
+        print(f"❌ Onboarding job failed: {str(e)}")
+        raise
+
+
+@register_job_processor("content_generation")
+def process_content_generation_job(params, job_id):
+    """
+    Process content generation in background
+
+    Args:
+        params: {user_key, topic}
+        job_id: Job identifier for progress tracking
+    """
+    user_key = params["user_key"]
+    topic = params["topic"]
+
+    print(f"\n{'='*60}")
+    print(f"📚 PROCESSING CONTENT GENERATION JOB: {job_id}")
+    print(f"{'='*60}")
+    print(f"👤 User: {user_key}")
+    print(f"📖 Topic: {topic}")
+
+    try:
+        # Update progress
+        JobQueue.update_job_progress(job_id, 20, "Preparing content generation...")
+
+        # Orchestrate content delivery
+        result = orchestrate_content_delivery(user_key, topic)
+
+        # Update progress
+        JobQueue.update_job_progress(job_id, 90, "Finalizing content...")
+
+        print(f"✅ Content generated for topic: {topic}")
+        print(f"{'='*60}\n")
+
+        return {
+            "content": result["content"],
+            "exercises": result.get("exercises", []),
+            "resources": result.get("resources", []),
+            "diagram": result.get("diagram", ""),
+            "agent_activity": result.get("agent_activity", [])
+        }
+
+    except Exception as e:
+        print(f"❌ Content generation job failed: {str(e)}")
+        raise
+
 # --- Endpoints ---
 
-@app.post("/adaptive/onboarding", response_model=OnboardingResponse)
+@app.get("/adaptive/jobs/{job_id}", response_model=JobStatusResponse)
+async def get_job_status(job_id: str):
+    """
+    Get status of an async job
+
+    Poll this endpoint to check job progress and retrieve results
+    when status is 'completed'
+    """
+    job_data = JobQueue.get_job_status(job_id)
+
+    if not job_data:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    return JobStatusResponse(
+        job_id=job_data["job_id"],
+        status=job_data["status"],
+        progress=job_data.get("progress", 0),
+        created_at=job_data["created_at"],
+        updated_at=job_data["updated_at"],
+        result=job_data.get("result"),
+        error=job_data.get("error"),
+        progress_message=job_data.get("progress_message")
+    )
+
+
+@app.post("/adaptive/onboarding", response_model=JobResponse, status_code=202)
 @limiter.limit("10/minute")
 async def adaptive_onboarding(request: Request, response: Response, req: OnboardingRequest):
     """
-    🤖 MULTI-AGENT WORKFLOW: Onboarding
+    🤖 MULTI-AGENT WORKFLOW: Onboarding (Async)
 
     Orchestrates Learner Profiler Agent → Journey Architect Agent
     to create a personalized learning experience.
+
+    Returns immediately with a job_id. Poll /adaptive/jobs/{job_id}
+    to get progress and results.
 
     This endpoint showcases agent collaboration!
     """
     user_key = await get_user_key(request, response)
 
     print("\n" + "="*60)
-    print("🎓 ONBOARDING ENDPOINT")
+    print("🎓 ONBOARDING ENDPOINT (ASYNC)")
     print("="*60)
     print(f"👤 Creating learning journey for user: {user_key}")
     print(f"📚 Interests: {req.interests}")
     print(f"🎯 Goals: {req.learning_goals}")
     print(f"⏱️  Time commitment: {req.time_commitment}h/week")
 
-    try:
-        # Prepare onboarding data
-        onboarding_data = {
-            "interests": req.interests,
-            "learning_goals": req.learning_goals,
-            "time_commitment": req.time_commitment,
-            "learning_style": req.learning_style,
-            "skill_level": req.skill_level,
-            "background": req.background
-        }
+    # Prepare onboarding data
+    onboarding_data = {
+        "interests": req.interests,
+        "learning_goals": req.learning_goals,
+        "time_commitment": req.time_commitment,
+        "learning_style": req.learning_style,
+        "skill_level": req.skill_level,
+        "background": req.background
+    }
 
-        # Orchestrate multi-agent onboarding
-        print("🤖 Starting multi-agent orchestration...")
-        result = orchestrate_onboarding(user_key, onboarding_data)
+    # Create async job
+    job_id = JobQueue.create_job("onboarding", {
+        "user_key": user_key,
+        "onboarding_data": onboarding_data
+    })
 
-        journey_count = len(result["learning_journey"])
-        print(f"✅ Journey created with {journey_count} topics")
-        print("="*60 + "\n")
+    print(f"✅ Job created: {job_id}")
+    print("="*60 + "\n")
 
-        return OnboardingResponse(
-            learner_profile=result["learner_profile"],
-            learning_journey=result["learning_journey"],
-            agent_activity=result["agent_activity"],
-            message="Your personalized learning journey has been created by our AI agents!"
-        )
-
-    except Exception as e:
-        print(f"❌ ERROR: {str(e)}")
-        print("="*60 + "\n")
-        raise HTTPException(status_code=500, detail=f"Failed to complete onboarding: {str(e)}")
+    return JobResponse(
+        job_id=job_id,
+        status="pending",
+        message="Onboarding job created. Poll /adaptive/jobs/{job_id} for status.",
+        poll_url=f"/adaptive/jobs/{job_id}"
+    )
 
 
 @app.get("/adaptive/journey")
@@ -334,33 +482,41 @@ async def get_adaptive_recommendations(request: Request, response: Response):
         raise HTTPException(status_code=500, detail=f"Failed to generate recommendations: {str(e)}")
 
 
-@app.get("/adaptive/content")
+@app.get("/adaptive/content", response_model=JobResponse, status_code=202)
 @limiter.limit("20/minute")
 async def get_adaptive_content(request: Request, response: Response, topic: str):
     """
-    🤖 MULTI-AGENT WORKFLOW: Adaptive Content Delivery
+    🤖 MULTI-AGENT WORKFLOW: Adaptive Content Delivery (Async)
 
     Orchestrates Performance Analyzer → Content Personalizer → Diagram Generator
     to deliver content at the right difficulty level.
+
+    Returns immediately with a job_id. Poll /adaptive/jobs/{job_id}
+    to get progress and results.
     """
     user_key = await get_user_key(request, response)
 
-    try:
-        # Orchestrate adaptive content delivery
-        result = orchestrate_content_delivery(user_key, topic)
+    print("\n" + "="*60)
+    print("📚 CONTENT DELIVERY ENDPOINT (ASYNC)")
+    print("="*60)
+    print(f"👤 User: {user_key}")
+    print(f"📖 Topic: {topic}")
 
-        return {
-            "content": result["content"].get("content", ""),
-            "exercises": result["content"].get("exercises", []),
-            "resources": result["content"].get("resources", []),
-            "diagram": result["content"].get("diagram", ""),
-            "difficulty": result["difficulty"],
-            "mastery": result.get("mastery"),
-            "agent_activity": result["agent_activity"]
-        }
+    # Create async job
+    job_id = JobQueue.create_job("content_generation", {
+        "user_key": user_key,
+        "topic": topic
+    })
 
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to deliver adaptive content: {str(e)}")
+    print(f"✅ Job created: {job_id}")
+    print("="*60 + "\n")
+
+    return JobResponse(
+        job_id=job_id,
+        status="pending",
+        message="Content generation job created. Poll /adaptive/jobs/{job_id} for status.",
+        poll_url=f"/adaptive/jobs/{job_id}"
+    )
 
 
 @app.post("/adaptive/content/complete")

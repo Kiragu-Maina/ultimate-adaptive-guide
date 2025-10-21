@@ -41,6 +41,8 @@ export default function OnboardingModal({ isOpen, onClose, onComplete }: Onboard
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [agentActivity, setAgentActivity] = useState<AgentActivity[]>([]);
   const [userId, setUserId] = useState<string>('');
+  const [jobProgress, setJobProgress] = useState(0);
+  const [jobStatus, setJobStatus] = useState('');
 
   // Form data
   const [interests, setInterests] = useState<string[]>([]);
@@ -107,16 +109,65 @@ export default function OnboardingModal({ isOpen, onClose, onComplete }: Onboard
     );
   };
 
+  const pollJobStatus = async (jobId: string): Promise<any> => {
+    const maxAttempts = 300; // Poll for up to 10 minutes (300 * 2s)
+    let attempts = 0;
+    let lastMessage = '';
+
+    while (attempts < maxAttempts) {
+      try {
+        const response = await fetch(`${getApiUrl()}/adaptive/jobs/${jobId}`, {
+          headers: {
+            'x-user-key': userId,
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to get job status');
+        }
+
+        const jobData = await response.json();
+
+        // Update progress bar
+        setJobProgress(jobData.progress || 0);
+
+        // Update status message (only if it changed)
+        const currentMessage = jobData.progress_message || jobData.status;
+        if (currentMessage && currentMessage !== lastMessage) {
+          setJobStatus(currentMessage);
+          lastMessage = currentMessage;
+        }
+
+        // Check job status
+        if (jobData.status === 'completed') {
+          setJobProgress(100);
+          setJobStatus('Completed! ✓');
+          return jobData.result;
+        } else if (jobData.status === 'failed') {
+          throw new Error(jobData.error || 'Job failed');
+        }
+
+        // Wait 2 seconds before next poll
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        attempts++;
+
+      } catch (error) {
+        console.error('Error polling job status:', error);
+        throw error;
+      }
+    }
+
+    throw new Error('Job timeout - processing took too long');
+  };
+
   const handleSubmit = async () => {
     setIsSubmitting(true);
     setAgentActivity([]);
+    setJobProgress(0);
+    setJobStatus('Initializing...');
 
     try {
-      // Simulate agent activity updates
-      setAgentActivity([
-        { agent: 'Learner Profiler', action: 'Analyzing your interests and background...' }
-      ]);
-
+      // Submit onboarding - this now returns a job ID
       const response = await fetch(`${getApiUrl()}/adaptive/onboarding`, {
         method: 'POST',
         headers: {
@@ -135,26 +186,32 @@ export default function OnboardingModal({ isOpen, onClose, onComplete }: Onboard
       });
 
       if (!response.ok) {
-        throw new Error('Failed to complete onboarding');
+        throw new Error('Failed to submit onboarding');
       }
 
-      const data = await response.json();
+      const jobData = await response.json();
+      setJobStatus('Processing your profile...');
 
-      // Show agent activity from backend
-      if (data.agent_activity) {
-        setAgentActivity(data.agent_activity);
+      // Poll for job completion
+      const result = await pollJobStatus(jobData.job_id);
+
+      // Show agent activity from result
+      if (result.agent_activity) {
+        setAgentActivity(result.agent_activity);
       }
 
-      // Wait a moment to show the agent activity
+      // Wait a moment to show the final agent activity
       setTimeout(() => {
-        onComplete(data.learner_profile, data.learning_journey);
+        onComplete(result.learner_profile, result.learning_journey);
         setIsSubmitting(false);
-      }, 1500);
+      }, 1000);
 
     } catch (error) {
       console.error('Onboarding error:', error);
-      alert('Failed to complete onboarding. Please try again.');
+      alert(`Failed to complete onboarding: ${error instanceof Error ? error.message : 'Unknown error'}`);
       setIsSubmitting(false);
+      setJobProgress(0);
+      setJobStatus('');
     }
   };
 
@@ -197,24 +254,43 @@ export default function OnboardingModal({ isOpen, onClose, onComplete }: Onboard
           ))}
         </div>
 
-        {/* Agent Activity Display (when processing) */}
-        {isSubmitting && agentActivity.length > 0 && (
-          <div className="bg-blue-50 border border-blue-200 rounded-lg p-4 mb-4">
-            <h3 className="font-semibold text-blue-900 mb-3 flex items-center">
-              <span className="animate-spin mr-2">🤖</span>
-              AI Agents Working...
-            </h3>
-            <div className="space-y-2">
-              {agentActivity.map((activity, idx) => (
-                <div key={idx} className="flex items-start space-x-2 text-sm">
-                  <span className="text-blue-600 font-medium">{activity.agent}:</span>
-                  <span className="text-gray-700">{activity.action}</span>
-                  {activity.confidence && (
-                    <span className="text-green-600 ml-auto">({activity.confidence})</span>
-                  )}
-                </div>
-              ))}
+        {/* Progress Display (when processing) */}
+        {isSubmitting && (
+          <div className="bg-gradient-to-r from-blue-50 to-purple-50 border border-blue-200 rounded-lg p-6 mb-4">
+            <div className="flex items-center mb-4">
+              <span className="animate-spin mr-3 text-3xl">🤖</span>
+              <div className="flex-1">
+                <h3 className="font-semibold text-blue-900 text-lg">
+                  AI Agents Working...
+                </h3>
+                <p className="text-sm text-blue-700 mt-1">{jobStatus}</p>
+              </div>
+              <span className="text-2xl font-bold text-blue-600">{jobProgress}%</span>
             </div>
+
+            {/* Progress Bar */}
+            <div className="w-full bg-blue-100 rounded-full h-3 overflow-hidden">
+              <div
+                className="bg-gradient-to-r from-blue-500 to-purple-500 h-full rounded-full transition-all duration-500 ease-out"
+                style={{ width: `${jobProgress}%` }}
+              />
+            </div>
+
+            {/* Agent Activity Steps (only show when completed) */}
+            {agentActivity.length > 0 && jobProgress === 100 && (
+              <div className="mt-4 space-y-2 border-t border-blue-200 pt-4">
+                {agentActivity.map((activity, idx) => (
+                  <div key={idx} className="flex items-start space-x-2 text-sm">
+                    <span className="text-green-600">✓</span>
+                    <span className="text-blue-700 font-medium">{activity.agent}:</span>
+                    <span className="text-gray-700">{activity.action}</span>
+                    {activity.confidence && (
+                      <span className="text-green-600 ml-auto">({activity.confidence})</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         )}
 

@@ -67,19 +67,31 @@ def get_user(user_id: str) -> bool:
 
 def create_user_profile(user_id: str, profile_data: Dict):
     """
-    Create user profile from onboarding
+    Create or update user profile from onboarding
     Called by Learner Profiler Agent
     """
     with get_db() as db:
-        profile = UserProfile(
-            user_id=user_id,
-            interests=profile_data.get("interests", []),
-            skill_level=profile_data.get("skill_level", "beginner"),
-            learning_goals=profile_data.get("learning_goals", []),
-            time_commitment=profile_data.get("time_commitment", 5),
-            learning_style=profile_data.get("learning_style", "mixed")
-        )
-        db.add(profile)
+        # Check if profile already exists
+        existing_profile = db.query(UserProfile).filter(UserProfile.user_id == user_id).first()
+
+        if existing_profile:
+            # Update existing profile
+            existing_profile.interests = profile_data.get("interests", [])
+            existing_profile.skill_level = profile_data.get("skill_level", "beginner")
+            existing_profile.learning_goals = profile_data.get("learning_goals", [])
+            existing_profile.time_commitment = profile_data.get("time_commitment", 5)
+            existing_profile.learning_style = profile_data.get("learning_style", "mixed")
+        else:
+            # Create new profile
+            profile = UserProfile(
+                user_id=user_id,
+                interests=profile_data.get("interests", []),
+                skill_level=profile_data.get("skill_level", "beginner"),
+                learning_goals=profile_data.get("learning_goals", []),
+                time_commitment=profile_data.get("time_commitment", 5),
+                learning_style=profile_data.get("learning_style", "mixed")
+            )
+            db.add(profile)
 
 
 def get_user_profile(user_id: str) -> Optional[Dict]:

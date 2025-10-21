@@ -32,6 +32,8 @@ function AdaptiveContentInner() {
   const [content, setContent] = useState<Content | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string>('');
+  const [jobProgress, setJobProgress] = useState(0);
+  const [jobStatus, setJobStatus] = useState('');
   const mermaidRef = useRef<HTMLDivElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
 
@@ -77,34 +79,110 @@ function AdaptiveContentInner() {
     }
   }, [content?.diagram]);
 
+  const pollJobStatus = async (jobId: string): Promise<any> => {
+    const maxAttempts = 300; // Poll for up to 10 minutes (300 * 2s)
+    let attempts = 0;
+    let lastMessage = '';
+
+    while (attempts < maxAttempts) {
+      try {
+        const response = await fetch(`${getApiUrl()}/adaptive/jobs/${jobId}`, {
+          headers: {
+            'x-user-key': userId,
+          }
+        });
+
+        if (!response.ok) {
+          throw new Error('Failed to get job status');
+        }
+
+        const jobData = await response.json();
+
+        // Update progress bar
+        setJobProgress(jobData.progress || 0);
+
+        // Update status message (only if it changed)
+        const currentMessage = jobData.progress_message || jobData.status;
+        if (currentMessage && currentMessage !== lastMessage) {
+          setJobStatus(currentMessage);
+          lastMessage = currentMessage;
+        }
+
+        // Check job status
+        if (jobData.status === 'completed') {
+          setJobProgress(100);
+          setJobStatus('Content ready! ✓');
+          return jobData.result;
+        } else if (jobData.status === 'failed') {
+          throw new Error(jobData.error || 'Job failed');
+        }
+
+        // Wait 2 seconds before next poll
+        await new Promise(resolve => setTimeout(resolve, 2000));
+        attempts++;
+
+      } catch (error) {
+        console.error('Error polling job status:', error);
+        throw error;
+      }
+    }
+
+    throw new Error('Job timeout - processing took too long');
+  };
+
   const fetchContent = async (sessionUserId: string, topicName: string) => {
     setIsLoading(true);
     setError('');
+    setJobProgress(0);
+    setJobStatus('Initializing content generation...');
 
     try {
+      // Submit content request - this now returns a job ID
       const response = await fetch(
-        `${getApiUrl()}/adaptive/content?topic=${encodeURIComponent(topicName)}&user_id=${sessionUserId}`
+        `${getApiUrl()}/adaptive/content?topic=${encodeURIComponent(topicName)}&user_id=${sessionUserId}`,
+        {
+          headers: {
+            'x-user-key': sessionUserId,
+          }
+        }
       );
 
       if (!response.ok) {
-        throw new Error('Failed to fetch content');
+        throw new Error('Failed to request content');
       }
 
-      const data = await response.json();
-      console.log('Received data:', data);
-      console.log('Content field:', data.content);
-      console.log('Content type:', typeof data.content);
-      setContent(data);
+      const jobData = await response.json();
+      console.log('Job created:', jobData);
+      setJobStatus('Processing content...');
+
+      // Poll for job completion
+      const result = await pollJobStatus(jobData.job_id);
+      console.log('Received result:', result);
+      console.log('Content field:', result.content);
+      console.log('Content type:', typeof result.content);
+
+      // Set the content from the job result
+      setContent({
+        content: result.content,
+        exercises: result.exercises || [],
+        resources: result.resources || [],
+        diagram: result.diagram || '',
+        difficulty: result.difficulty || 'medium',
+        mastery: result.mastery,
+        agent_activity: result.agent_activity || []
+      });
 
       // Show notification that content is ready
-      if (data && topicName) {
+      if (result && topicName) {
         notifyContentReady(topicName);
       }
     } catch (err) {
       console.error('Error fetching content:', err);
-      setError('Failed to load content. Please try again.');
+      setError(`Failed to load content: ${err instanceof Error ? err.message : 'Unknown error'}`);
     } finally {
       setIsLoading(false);
+      setJobProgress(0);
+      setJobStatus('');
     }
   };
 
@@ -141,11 +219,62 @@ function AdaptiveContentInner() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin text-6xl mb-4">🤖</div>
-          <p className="text-gray-700 text-lg font-medium">Loading adaptive content...</p>
-          <p className="text-gray-600 text-sm mt-2">AI agents are personalizing this for you</p>
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="max-w-md w-full">
+          <div className="bg-white rounded-xl shadow-lg p-8">
+            {/* Header */}
+            <div className="text-center mb-6">
+              <div className="animate-spin text-6xl mb-4">🤖</div>
+              <h2 className="text-2xl font-bold text-gray-800 mb-2">
+                Generating Content
+              </h2>
+              <p className="text-gray-600">
+                AI agents are personalizing <strong>{topic}</strong> for you
+              </p>
+            </div>
+
+            {/* Progress Section */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between text-sm">
+                <span className="text-gray-600">{jobStatus}</span>
+                <span className="font-bold text-blue-600">{jobProgress}%</span>
+              </div>
+
+              {/* Progress Bar */}
+              <div className="w-full bg-gray-200 rounded-full h-4 overflow-hidden">
+                <div
+                  className="bg-gradient-to-r from-blue-500 via-purple-500 to-pink-500 h-full rounded-full transition-all duration-500 ease-out"
+                  style={{ width: `${jobProgress}%` }}
+                />
+              </div>
+
+              {/* Status Stages */}
+              <div className="space-y-2 mt-6">
+                <div className={`flex items-center space-x-2 text-sm ${jobProgress >= 20 ? 'text-green-600' : 'text-gray-400'}`}>
+                  {jobProgress >= 20 ? '✓' : '○'} <span>Analyzing your learning profile</span>
+                </div>
+                <div className={`flex items-center space-x-2 text-sm ${jobProgress >= 40 ? 'text-green-600' : 'text-gray-400'}`}>
+                  {jobProgress >= 40 ? '✓' : '○'} <span>Determining content difficulty</span>
+                </div>
+                <div className={`flex items-center space-x-2 text-sm ${jobProgress >= 60 ? 'text-green-600' : 'text-gray-400'}`}>
+                  {jobProgress >= 60 ? '✓' : '○'} <span>Generating personalized content</span>
+                </div>
+                <div className={`flex items-center space-x-2 text-sm ${jobProgress >= 80 ? 'text-green-600' : 'text-gray-400'}`}>
+                  {jobProgress >= 80 ? '✓' : '○'} <span>Creating visual diagrams</span>
+                </div>
+                <div className={`flex items-center space-x-2 text-sm ${jobProgress === 100 ? 'text-green-600' : 'text-gray-400'}`}>
+                  {jobProgress === 100 ? '✓' : '○'} <span>Finalizing your lesson</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Tip */}
+            <div className="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+              <p className="text-xs text-blue-800">
+                💡 <strong>Tip:</strong> This may take 1-3 minutes as our AI agents personalize the content based on your skill level and learning style.
+              </p>
+            </div>
+          </div>
         </div>
       </div>
     );
