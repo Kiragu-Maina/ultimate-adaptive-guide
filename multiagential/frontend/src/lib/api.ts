@@ -92,7 +92,7 @@ class ApiClient {
 
   constructor(baseUrl?: string) {
     // Read from environment variable, fallback to parameter or default
-    this.baseUrl = baseUrl || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4465';
+    this.baseUrl = baseUrl || process.env.NEXT_PUBLIC_API_URL || 'https://school.alkenacode.dev/api';
     this.userKey = this.getUserKey();
   }
 
