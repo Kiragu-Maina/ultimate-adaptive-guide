@@ -7,7 +7,7 @@ export const config = {
    * Get the API base URL from environment variable
    * Falls back to localhost if not set
    */
-  apiUrl: process.env.NEXT_PUBLIC_API_URL || 'https://school.alkenacode.dev/api',
+  apiUrl: 'https://school.alkenacode.dev/api',
 } as const;
 
 /**
