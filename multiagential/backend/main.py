@@ -13,7 +13,7 @@ from slowapi.errors import RateLimitExceeded
 load_dotenv()
 
 from content_graph import create_content_graph
-import database
+# import database  # Old SQLite database - replaced with PostgreSQL
 from adaptive_orchestrator import (
     orchestrate_onboarding,
     orchestrate_content_delivery
@@ -32,7 +32,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 @app.on_event("startup")
 async def startup_event():
-    database.init_db()
+    db_pg.init_db()
 
 # Allow frontend requests
 app.add_middleware(
@@ -67,9 +67,9 @@ async def get_user_key(request: Request, response: Response):
     else:
         print(f"✅ Using existing user_key: {user_key}")
 
-    existing_user = database.get_user(user_key)
+    existing_user = db_pg.get_user(user_key)
     if not existing_user:
-        database.create_user(user_key)
+        db_pg.create_user(user_key)
         print(f"👤 Created new user in database: {user_key}")
     else:
         print(f"👤 Found existing user in database: {user_key}")
