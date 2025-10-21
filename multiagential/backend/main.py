@@ -239,11 +239,16 @@ def process_content_generation_job(params, job_id):
         print(f"✅ Content generated for topic: {topic}")
         print(f"{'='*60}\n")
 
+        # Extract content object from result
+        content_obj = result.get("content", {})
+
         return {
-            "content": result["content"],
-            "exercises": result.get("exercises", []),
-            "resources": result.get("resources", []),
-            "diagram": result.get("diagram", ""),
+            "content": content_obj.get("content", ""),
+            "exercises": content_obj.get("exercises", []),
+            "resources": content_obj.get("resources", []),
+            "diagram": content_obj.get("diagram", ""),
+            "difficulty": result.get("difficulty", "medium"),
+            "mastery": result.get("mastery"),
             "agent_activity": result.get("agent_activity", [])
         }
 
