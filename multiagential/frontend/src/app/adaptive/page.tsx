@@ -159,13 +159,18 @@ export default function AdaptivePage() {
         // Dashboard
         <>
           {/* Top Navigation */}
-          <nav className="bg-white shadow-sm border-b">
-            <div className="max-w-7xl mx-auto px-6 py-4">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center space-x-4">
-                  <h1 className="text-2xl font-bold text-gray-900">AlkenaCode Adaptive</h1>
-                  <span className="px-3 py-1 bg-green-100 text-green-800 text-sm rounded-full font-medium">
-                    🤖 Multi-Agent System Active
+          <header className="bg-white shadow-sm">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex justify-between items-center py-6">
+                <div className="flex items-center">
+                  <a href="/" className="text-3xl font-bold text-gray-900 hover:text-blue-600 transition-colors">
+                    AlkenaCode School
+                  </a>
+                  <span className="ml-3 px-3 py-1 text-sm bg-blue-100 text-blue-800 rounded-full">
+                    AI-Powered Learning
+                  </span>
+                  <span className="ml-2 px-3 py-1 text-sm bg-green-100 text-green-800 rounded-full">
+                    🤖 Adaptive Mode Active
                   </span>
                 </div>
                 <button
@@ -174,6 +179,48 @@ export default function AdaptivePage() {
                 >
                   ⚙️ Restart Onboarding
                 </button>
+              </div>
+            </div>
+          </header>
+
+          <nav className="bg-white border-t border-gray-200">
+            <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+              <div className="flex space-x-8">
+                <a
+                  href="/"
+                  className="py-4 px-1 border-b-2 border-transparent text-gray-600 hover:text-gray-900 font-medium text-sm transition-colors"
+                >
+                  <span className="mr-2">🏠</span>
+                  Home
+                </a>
+                <a
+                  href="/journey"
+                  className="py-4 px-1 border-b-2 border-transparent text-gray-600 hover:text-gray-900 font-medium text-sm transition-colors"
+                >
+                  <span className="mr-2">🗺️</span>
+                  My Journey
+                </a>
+                <a
+                  href="/practice"
+                  className="py-4 px-1 border-b-2 border-transparent text-gray-600 hover:text-gray-900 font-medium text-sm transition-colors"
+                >
+                  <span className="mr-2">💪</span>
+                  Practice
+                </a>
+                <a
+                  href="/progress"
+                  className="py-4 px-1 border-b-2 border-transparent text-gray-600 hover:text-gray-900 font-medium text-sm transition-colors"
+                >
+                  <span className="mr-2">📊</span>
+                  Progress
+                </a>
+                <a
+                  href="/adaptive"
+                  className="py-4 px-1 border-b-2 border-green-600 text-green-600 font-medium text-sm transition-colors"
+                >
+                  <span className="mr-2">🤖</span>
+                  Adaptive Learning
+                </a>
               </div>
             </div>
           </nav>

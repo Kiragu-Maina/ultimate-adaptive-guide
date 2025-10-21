@@ -92,7 +92,7 @@ function Navigation({ hasProfile }: { hasProfile: boolean }) {
             className="py-4 px-1 border-b-2 border-transparent text-green-600 hover:text-green-700 hover:border-green-300 dark:text-green-400 dark:hover:text-green-300 font-medium text-sm transition-colors relative"
           >
             <span className="mr-2">🤖</span>
-            Start Onboarding
+            {hasProfile ? 'Adaptive Learning' : 'Start Onboarding'}
             {hasProfile && (
               <span className="absolute top-2 right-0 w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
             )}
